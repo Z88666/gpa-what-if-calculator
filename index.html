@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPA What-If Calculator 預測 GPA 計算機</title>
+<meta name="description" content="計而家 GPA,計要攞幾多分先達到目標 GPA。免費、免登入、無伺服器。Work out your GPA now and what grades you need to reach your target.">
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: #ffffff; color: #111111;
+  font-family: -apple-system, "PingFang HK", "Microsoft JhengHei", "Helvetica Neue", Arial, sans-serif;
+  font-size: 16px; line-height: 1.6; }
+.wrap { max-width: 720px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 22px; margin: 8px 0 4px; }
+.sub { color: #555; margin: 0 0 12px; }
+h2 { font-size: 17px; margin: 20px 0 6px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+label { display: block; font-size: 14px; color: #333; margin: 10px 0 2px; }
+input, select { font-size: 16px; padding: 9px 10px; border: 1px solid #999;
+  border-radius: 8px; background: #fff; color: #111; font-family: inherit; }
+input { width: 100%; }
+button { font-size: 16px; padding: 10px 16px; border-radius: 8px;
+  border: 1px solid #111; background: #111; color: #fff; cursor: pointer;
+  margin: 8px 6px 8px 0; }
+button.ghost { background: #fff; color: #111; }
+button.small { padding: 6px 10px; font-size: 14px; margin: 0; }
+.big { font-size: 30px; font-weight: bold; margin: 4px 0; }
+.big small { font-size: 15px; font-weight: normal; color: #555; }
+.result { background: #f6f6f6; border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 12px 0; }
+.result.good { border-color: #0a7d0a; }
+.result.bad { border-color: #a00; }
+.result p { margin: 4px 0; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #ddd; font-size: 15px; }
+th { color: #555; }
+td input, td select { padding: 6px 8px; font-size: 15px; }
+td input.credits { width: 64px; }
+.row { display: flex; gap: 10px; }
+.row > div { flex: 1; min-width: 0; }
+.note { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px;
+  padding: 10px 12px; font-size: 14px; margin: 16px 0; }
+.foot { color: #777; font-size: 13px; margin: 24px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>GPA What-If Calculator <span style="font-size:15px;color:#555">預測 GPA 計算機</span></h1>
+  <p class="sub">計而家 GPA,計要攞幾多分先達到目標。免費、免登入、無伺服器。<br>
+  <strong>學期分組、自動儲存、CSV 匯出齊晒。</strong> Semesters, auto-save &amp; CSV export included.</p>
+
+  <h2>已修科目 Finished courses</h2>
+  <table id="courseTable">
+    <thead><tr><th>學期 Semester</th><th>科目 Course</th><th>學分 Credits</th><th>成績 Grade</th><th></th></tr></thead>
+    <tbody id="courseBody"></tbody>
+  </table>
+  <button id="addCourse">+ 加一科 Add course</button>
+  <button id="loadSample" class="ghost">載入範例 Load sample</button>
+  <button id="exportCsv" class="ghost">匯出 CSV Export CSV</button>
+  <button id="clearSaved" class="ghost">清除儲存 Clear saved</button>
+  <div class="result" id="semBox"><p>學期 GPA 會喺呢度分組顯示。Semester GPAs appear here, grouped.</p></div>
+
+  <div class="result">
+    <p>而家 GPA · Current GPA (4.0 scale)</p>
+    <p class="big"><span id="gpaNow">—</span> <small id="creditsNow"></small></p>
+    <p id="gpaNote" style="color:#555"></p>
+  </div>
+
+  <h2>目標預測 What-if: reach a target GPA</h2>
+  <div class="row">
+    <div><label>目標 GPA Target GPA</label><input type="text" id="targetGpa" value="3.5"></div>
+    <div><label>餘下學分 Remaining credits planned</label><input type="text" id="remainCredits" value="30"></div>
+  </div>
+  <div class="result" id="solverBox"><p>輸入目標同餘下學分,呢度會話你知平均要攞幾多分。</p></div>
+
+  <h2>試一科 Try one planned course</h2>
+  <div class="row">
+    <div><label>學分 Credits</label><input type="text" id="trialCredits" value="3"></div>
+    <div><label>假設成績 Trial grade</label>
+      <select id="trialGrade">
+        <option value="4">A (4.0)</option><option value="3.7">A- (3.7)</option>
+        <option value="3.3">B+ (3.3)</option><option value="3" selected>B (3.0)</option>
+        <option value="2.7">B- (2.7)</option><option value="2.3">C+ (2.3)</option>
+        <option value="2">C (2.0)</option><option value="1">D (1.0)</option>
+        <option value="0">F (0)</option>
+      </select>
+    </div>
+  </div>
+  <div class="result" id="trialBox"><p>揀學分同成績,呢度會顯示 GPA 變成幾多。</p></div>
+
+  <div class="note">呢個係規劃工具,唔係官方成績單。唔同大學計分制唔同,請對照你學校嘅
+  scale;重修科喺呢度會重複計算,請自行刪走舊嗰行。資料唔會上傳,
+  重新整理頁面會清空 (儲存功能未做,見 SPEC.md)。<br>
+  Planning aid only — not an official transcript. Grade scales differ by
+  university; retaken courses count twice here unless you delete the old row.
+  Nothing is uploaded; your courses auto-save in this browser (localStorage)
+  and come back when you reopen the page. CSV export downloads your list.</div>
+  <p class="foot">GPA What-If Calculator — 開放原始碼 (MIT)。純 HTML/CSS/ES5,零外部資源。</p>
+</div>
+<script>
+/* GPA What-If Calculator — ES5 only, iOS 16 Safari safe. */
+var STORE_KEY = "gpa-what-if-v1";
+var GRADES = [
+  { label: "A (4.0)", value: 4 }, { label: "A- (3.7)", value: 3.7 },
+  { label: "B+ (3.3)", value: 3.3 }, { label: "B (3.0)", value: 3 },
+  { label: "B- (2.7)", value: 2.7 }, { label: "C+ (2.3)", value: 2.3 },
+  { label: "C (2.0)", value: 2 }, { label: "C- (1.7)", value: 1.7 },
+  { label: "D (1.0)", value: 1 }, { label: "F (0)", value: 0 }
+];
+var MAX_POINT = 4.0;
+
+function el(id) { return document.getElementById(id); }
+function num(v, fallback) { var n = parseFloat(v); return isNaN(n) ? fallback : n; }
+function fmt(n) { return (Math.round(n * 100) / 100).toFixed(2); }
+function gradeOptions(selected) {
+  var h = "", i;
+  for (i = 0; i < GRADES.length; i++) {
+    h += '<option value="' + GRADES[i].value + '"' +
+      (GRADES[i].value === selected ? " selected" : "") + ">" + GRADES[i].label + "</option>";
+  }
+  return h;
+}
+function computeGPA(rows) {
+  var points = 0, credits = 0, i;
+  for (i = 0; i < rows.length; i++) {
+    if (rows[i].credits > 0) { points += rows[i].credits * rows[i].grade; credits += rows[i].credits; }
+  }
+  return { gpa: credits ? points / credits : null, credits: credits, points: points };
+}
+/* Group rows by semester; returns [{semester, gpa, credits, points}] in first-seen order. */
+function semesterGPAs(rows) {
+  var order = [], map = {}, i, s, r;
+  for (i = 0; i < rows.length; i++) {
+    s = rows[i].semester || "未分學期";
+    if (!map[s]) { map[s] = []; order.push(s); }
+    map[s].push(rows[i]);
+  }
+  r = [];
+  for (i = 0; i < order.length; i++) {
+    var g = computeGPA(map[order[i]]);
+    r.push({ semester: order[i], gpa: g.gpa, credits: g.credits, points: g.points });
+  }
+  return r;
+}
+function csvEscape(v) {
+  var s = String(v == null ? "" : v);
+  return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function toCSV(rows) {
+  var out = ["Semester,Course,Credits,GradePoints"], i;
+  for (i = 0; i < rows.length; i++) {
+    out.push([csvEscape(rows[i].semester), csvEscape(rows[i].name),
+      rows[i].credits, rows[i].grade].join(","));
+  }
+  return out.join("\n");
+}
+function downloadFile(name, text, type) {
+  var blob, a;
+  try {
+    blob = new Blob([text], { type: type || "text/plain;charset=utf-8" });
+    a = document.createElement("a");
+    a.href = window.URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    setTimeout(function () { window.URL.revokeObjectURL(a.href); }, 1000);
+  } catch (e) { alert("匯出失敗 Export failed: " + e.message); }
+}
+function saveState(rows) {
+  try {
+    window.localStorage.setItem(STORE_KEY, JSON.stringify({
+      rows: rows, target: el("targetGpa").value,
+      remain: el("remainCredits").value, trialCredits: el("trialCredits").value
+    }));
+  } catch (e) {}
+}
+function loadState() {
+  try {
+    var raw = window.localStorage.getItem(STORE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function nearestGradeLabel(point) {
+  var best = GRADES[0], i, d, bd = 99;
+  for (i = 0; i < GRADES.length; i++) {
+    d = Math.abs(GRADES[i].value - point);
+    if (d < bd) { bd = d; best = GRADES[i]; }
+  }
+  return best.label;
+}
+/* Required average grade point over the remaining credits to reach target. */
+function requiredAverage(now, target, remain) {
+  if (remain <= 0) return { error: "remaining credits must be above 0" };
+  var need = (target * (now.credits + remain) - now.points) / remain;
+  return { need: need, reachable: need <= MAX_POINT + 0.001 };
+}
+function readRows() {
+  var rows = [], body = el("courseBody"), trs = body.getElementsByTagName("tr"), i, tds;
+  for (i = 0; i < trs.length; i++) {
+    tds = trs[i].getElementsByTagName("td");
+    rows.push({
+      semester: tds[0].getElementsByTagName("input")[0].value,
+      name: tds[1].getElementsByTagName("input")[0].value,
+      credits: num(tds[2].getElementsByTagName("input")[0].value, 0),
+      grade: num(tds[3].getElementsByTagName("select")[0].value, 0)
+    });
+  }
+  return rows;
+}
+function addRow(semester, name, credits, grade) {
+  var tr = document.createElement("tr");
+  tr.innerHTML = '<td><input type="text" class="semester" value="' + (semester || "Sem 1") + '"></td>' +
+    '<td><input type="text" value="' + (name || "") + '" placeholder="e.g. MKTG 101"></td>' +
+    '<td><input type="text" class="credits" value="' + (credits == null ? 3 : credits) + '"></td>' +
+    '<td><select>' + gradeOptions(grade == null ? 3 : grade) + "</select></td>" +
+    '<td><button class="small ghost">✕</button></td>';
+  tr.getElementsByTagName("button")[0].addEventListener("click", function () {
+    tr.parentNode.removeChild(tr); render();
+  }, false);
+  var inputs = tr.getElementsByTagName("input");
+  inputs[0].addEventListener("input", render, false);
+  inputs[1].addEventListener("input", render, false);
+  inputs[2].addEventListener("input", render, false);
+  tr.getElementsByTagName("select")[0].addEventListener("change", render, false);
+  el("courseBody").appendChild(tr);
+}
+function render() {
+  var rows = readRows(), now = computeGPA(rows);
+  var target = num(el("targetGpa").value, NaN), remain = num(el("remainCredits").value, 0);
+  var tCredits = num(el("trialCredits").value, 0), tGrade = num(el("trialGrade").value, 0);
+  var box, trial;
+  if (now.gpa == null) {
+    el("gpaNow").textContent = "—";
+    el("creditsNow").textContent = "";
+    el("gpaNote").textContent = "加返啲科目先計到。Add some courses first.";
+  } else {
+    el("gpaNow").textContent = fmt(now.gpa);
+    el("creditsNow").textContent = "· " + now.credits + " credits";
+    el("gpaNote").textContent = "Grade points " + fmt(now.points) + " / " + now.credits + " credits · 4.0 scale";
+  }
+  var sems = semesterGPAs(rows), sh = "", si;
+  for (si = 0; si < sems.length; si++) {
+    sh += "<p><strong>" + sems[si].semester + ":</strong> " +
+      (sems[si].gpa == null ? "—" : fmt(sems[si].gpa)) + " · " + sems[si].credits + " credits</p>";
+  }
+  el("semBox").innerHTML = sh || "<p>學期 GPA 會喺呢度分組顯示。Semester GPAs appear here, grouped.</p>";
+  saveState(rows);
+  box = el("solverBox");
+  if (now.gpa == null || isNaN(target)) {
+    box.className = "result";
+    box.innerHTML = "<p>輸入目標同餘下學分,呢度會話你知平均要攞幾多分。</p>";
+  } else if (target > MAX_POINT) {
+    box.className = "result bad";
+    box.innerHTML = "<p><strong>目標超出 4.0 上限。</strong> Target above the 4.0 maximum — pick 4.0 or lower.</p>";
+  } else {
+    var r = requiredAverage(now, target, remain);
+    if (r.error) {
+      box.className = "result";
+      box.innerHTML = "<p>餘下學分要大過 0。</p>";
+    } else if (r.need <= 0) {
+      box.className = "result good";
+      box.innerHTML = "<p><strong>已經達標!</strong> Even with 0 in the remaining credits you finish at " +
+        fmt(now.points / (now.credits + remain)) + " — above your target of " + fmt(target) + ".</p>";
+    } else if (r.reachable) {
+      box.className = "result good";
+      box.innerHTML = "<p>餘下 " + remain + " 學分,平均要攞 <strong>" + fmt(r.need) +
+        " 分</strong> (約 " + nearestGradeLabel(r.need) + "),先達到 GPA " + fmt(target) + "。</p>" +
+        "<p>To finish at " + fmt(target) + ", average " + fmt(r.need) + " (" + nearestGradeLabel(r.need) +
+        ") across your remaining " + remain + " credits.</p>";
+    } else {
+      box.className = "result bad";
+      box.innerHTML = "<p><strong>做唔到。</strong> You would need an average of " + fmt(r.need) +
+        ", above the 4.0 maximum, with only " + remain + " credits left.</p>" +
+        "<p>就算餘下全部攞 A,最高只去到 " + fmt((now.points + MAX_POINT * remain) / (now.credits + remain)) +
+        "。加多啲學分,或者將目標調低啲。</p>";
+    }
+  }
+  trial = el("trialBox");
+  if (now.gpa == null || tCredits <= 0) {
+    trial.className = "result";
+    trial.innerHTML = "<p>揀學分同成績,呢度會顯示 GPA 變成幾多。</p>";
+  } else {
+    var ng = (now.points + tCredits * tGrade) / (now.credits + tCredits);
+    trial.className = "result";
+    trial.innerHTML = "<p>如果呢科 (" + tCredits + " 學分) 攞 " + nearestGradeLabel(tGrade) +
+      ",GPA 會由 " + fmt(now.gpa) + " 變成 <strong>" + fmt(ng) + "</strong>。</p>";
+  }
+}
+el("addCourse").addEventListener("click", function () { addRow("Sem 1", "", 3, 3); render(); }, false);
+el("loadSample").addEventListener("click", function () {
+  el("courseBody").innerHTML = "";
+  addRow("Sem 1", "MKTG 101", 3, 4); addRow("Sem 1", "ECON 100", 3, 3.3); addRow("Sem 1", "ACCT 101", 3, 3);
+  addRow("Sem 2", "ENGL 100", 3, 3.7); addRow("Sem 2", "MATH 101", 3, 2.7);
+  render();
+}, false);
+el("exportCsv").addEventListener("click", function () {
+  downloadFile("gpa-courses.csv", toCSV(readRows()), "text/csv;charset=utf-8");
+}, false);
+el("clearSaved").addEventListener("click", function () {
+  try { window.localStorage.removeItem(STORE_KEY); } catch (e) {}
+  el("courseBody").innerHTML = "";
+  addRow("Sem 1", "MKTG 101", 3, 4); addRow("Sem 1", "ECON 100", 3, 3.3); addRow("Sem 1", "ACCT 101", 3, 3);
+  render();
+}, false);
+el("targetGpa").addEventListener("input", render, false);
+el("remainCredits").addEventListener("input", render, false);
+el("trialCredits").addEventListener("input", render, false);
+el("trialGrade").addEventListener("change", render, false);
+(function () {
+  var saved = loadState(), i;
+  if (saved && saved.rows && saved.rows.length) {
+    if (saved.target != null) el("targetGpa").value = saved.target;
+    if (saved.remain != null) el("remainCredits").value = saved.remain;
+    if (saved.trialCredits != null) el("trialCredits").value = saved.trialCredits;
+    for (i = 0; i < saved.rows.length; i++) {
+      addRow(saved.rows[i].semester, saved.rows[i].name, saved.rows[i].credits, saved.rows[i].grade);
+    }
+  } else {
+    addRow("Sem 1", "MKTG 101", 3, 4); addRow("Sem 1", "ECON 100", 3, 3.3); addRow("Sem 1", "ACCT 101", 3, 3);
+  }
+})();
+render();
+</script>
+</body>
+</html>

@@ -47,20 +47,41 @@ td input.credits { width: 64px; }
   <p class="sub">計而家 GPA,計要攞幾多分先達到目標。免費、免登入、無伺服器。<br>
   <strong>學期分組、自動儲存、CSV 匯出齊晒。</strong> Semesters, auto-save &amp; CSV export included.</p>
 
+  <div class="row">
+    <div><label>計分制 Grade scale</label>
+      <select id="scaleSel">
+        <option value="4.0" selected>4.0 制 (香港常見)</option>
+        <option value="4.3">4.3 制 (A+ = 4.3)</option>
+      </select>
+    </div>
+    <div><label>成績等級 Grade bands (通用參考)</label>
+      <div style="font-size:14px;color:#555;padding:9px 0">A ≥ 3.7 · B ≥ 2.7 · C ≥ 1.7 · D ≥ 1.0 · F &lt; 1.0</div>
+    </div>
+  </div>
+  <p id="scaleNote" style="font-size:14px;color:#8a6d00;margin:4px 0"></p>
+
   <h2>已修科目 Finished courses</h2>
   <table id="courseTable">
-    <thead><tr><th>學期 Semester</th><th>科目 Course</th><th>學分 Credits</th><th>成績 Grade</th><th></th></tr></thead>
+    <thead><tr><th>學期 Semester</th><th>科目 Course</th><th>學分 Credits</th><th>成績 Grade</th><th>計入?</th><th></th></tr></thead>
     <tbody id="courseBody"></tbody>
   </table>
   <button id="addCourse">+ 加一科 Add course</button>
   <button id="loadSample" class="ghost">載入範例 Load sample</button>
   <button id="exportCsv" class="ghost">匯出 CSV Export CSV</button>
+  <button id="importCsv" class="ghost">匯入 CSV Import CSV</button>
+  <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none">
   <button id="clearSaved" class="ghost">清除儲存 Clear saved</button>
+  <p style="font-size:14px;color:#555;margin:6px 0">「計入?」剔走就唔計 GPA — 用嚟排除重修舊科或 Pass/Fail 科。匯入 CSV 接受「Semester,Course,Credits,GradePoints」格式,成績可寫數字 (3.7) 或字母 (A-)。如果成績超出所選計分制上限 (例如 4.0 制寫 A+ / 4.3),匯入時會調到上限,並逐行話你知邊幾行被調低咗。<br>
+  Untick “Count?” to exclude a course from the GPA — for a retaken old row or a Pass/Fail course. CSV import accepts Semester,Course,Credits,GradePoints; grades as numbers (3.7) or letters (A-).</p>
   <div class="result" id="semBox"><p>學期 GPA 會喺呢度分組顯示。Semester GPAs appear here, grouped.</p></div>
+  <div class="result" id="distBox"><p>成績分佈會喺呢度顯示。Grade distribution appears here.</p></div>
 
   <div class="result">
-    <p>而家 GPA · Current GPA (4.0 scale)</p>
+    <p>而家 GPA · Current GPA (<span id="scaleLabel">4.0</span> scale)</p>
     <p class="big"><span id="gpaNow">—</span> <small id="creditsNow"></small></p>
+    <div style="height:10px;background:#e0e0e0;border-radius:5px;overflow:hidden;margin:6px 0">
+      <div id="gpaFill" style="height:100%;background:#0a7d0a;width:0%"></div>
+    </div>
     <p id="gpaNote" style="color:#555"></p>
   </div>
 
@@ -70,6 +91,9 @@ td input.credits { width: 64px; }
     <div><label>餘下學分 Remaining credits planned</label><input type="text" id="remainCredits" value="30"></div>
   </div>
   <div class="result" id="solverBox"><p>輸入目標同餘下學分,呢度會話你知平均要攞幾多分。</p></div>
+
+  <h2>情景推算 Scenarios — what if the rest goes…</h2>
+  <div class="result" id="scenarioBox"><p>輸入目標同餘下學分,呢度會推算全 A / 全 B / 全 C 嘅結果,同埋要幾多學分全 A 先達標。</p></div>
 
   <h2>試一科 Try one planned course</h2>
   <div class="row">
@@ -87,8 +111,8 @@ td input.credits { width: 64px; }
   <div class="result" id="trialBox"><p>揀學分同成績,呢度會顯示 GPA 變成幾多。</p></div>
 
   <div class="note">呢個係規劃工具,唔係官方成績單。唔同大學計分制唔同,請對照你學校嘅
-  scale;重修科喺呢度會重複計算,請自行刪走舊嗰行。資料唔會上傳,
-  重新整理頁面會清空 (儲存功能未做,見 SPEC.md)。<br>
+  scale (上面可切換 4.0 / 4.3 制);重修科請剔走舊嗰行嘅「計入?」,唔係會重複計算。資料唔會上傳,
+  會自動儲喺呢部瀏覽器,下次打開會返嚟;清瀏覽器資料會一併清走。<br>
   Planning aid only — not an official transcript. Grade scales differ by
   university; retaken courses count twice here unless you delete the old row.
   Nothing is uploaded; your courses auto-save in this browser (localStorage)
@@ -98,16 +122,67 @@ td input.credits { width: 64px; }
 <script>
 /* GPA What-If Calculator — ES5 only, iOS 16 Safari safe. */
 var STORE_KEY = "gpa-what-if-v1";
-var GRADES = [
+var GRADES_40 = [
   { label: "A (4.0)", value: 4 }, { label: "A- (3.7)", value: 3.7 },
   { label: "B+ (3.3)", value: 3.3 }, { label: "B (3.0)", value: 3 },
   { label: "B- (2.7)", value: 2.7 }, { label: "C+ (2.3)", value: 2.3 },
   { label: "C (2.0)", value: 2 }, { label: "C- (1.7)", value: 1.7 },
   { label: "D (1.0)", value: 1 }, { label: "F (0)", value: 0 }
 ];
+var GRADES_43 = [
+  { label: "A+ (4.3)", value: 4.3 }, { label: "A (4.0)", value: 4 },
+  { label: "A- (3.7)", value: 3.7 }, { label: "B+ (3.3)", value: 3.3 },
+  { label: "B (3.0)", value: 3 }, { label: "B- (2.7)", value: 2.7 },
+  { label: "C+ (2.3)", value: 2.3 }, { label: "C (2.0)", value: 2 },
+  { label: "C- (1.7)", value: 1.7 }, { label: "D (1.0)", value: 1 },
+  { label: "F (0)", value: 0 }
+];
+/* GRADES / MAX_POINT always track the selected scale. */
+var GRADES = GRADES_40;
 var MAX_POINT = 4.0;
+function gradesForScale(scale) { return scale === "4.3" ? GRADES_43 : GRADES_40; }
+function maxPointForScale(scale) { return scale === "4.3" ? 4.3 : 4.0; }
+function applyScale(scale) {
+  GRADES = gradesForScale(scale);
+  MAX_POINT = maxPointForScale(scale);
+}
 
 function el(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+/* Snap a grade point to a value the current scale actually offers:
+   the largest grade <= the point (A+ 4.3 -> A 4.0 on the 4.0 scale, never
+   silently down to B). Falls back to the lowest grade. Pure. */
+function snapGradeDown(point) {
+  var best = null, i;
+  for (i = 0; i < GRADES.length; i++) {
+    if (GRADES[i].value <= point + 0.001 && (best == null || GRADES[i].value > best)) best = GRADES[i].value;
+  }
+  if (best != null) return best;
+  return GRADES.length ? GRADES[GRADES.length - 1].value : 0;
+}
+/* Same snap, but for an explicit scale ("4.0" / "4.3") instead of the
+   currently selected one — used by CSV import so it can report, per row,
+   which grades were lowered to fit the scale. Pure. */
+function clampGradeForScale(point, scale) {
+  var grades = gradesForScale(scale), best = null, i;
+  for (i = 0; i < grades.length; i++) {
+    if (grades[i].value <= point + 0.001 && (best == null || grades[i].value > best)) best = grades[i].value;
+  }
+  if (best != null) return best;
+  return grades.length ? grades[grades.length - 1].value : 0;
+}
+/* Rows whose credits look like a typo: a named course with 0/negative or
+   >30 credits is ignored by the GPA maths, so flag it. Pure. */
+function invalidRows(rows) {
+  var n = 0, i;
+  for (i = 0; i < rows.length; i++) {
+    if (rows[i].name && (rows[i].credits <= 0 || rows[i].credits > 30)) n++;
+  }
+  return n;
+}
 function num(v, fallback) { var n = parseFloat(v); return isNaN(n) ? fallback : n; }
 function fmt(n) { return (Math.round(n * 100) / 100).toFixed(2); }
 function gradeOptions(selected) {
@@ -121,9 +196,97 @@ function gradeOptions(selected) {
 function computeGPA(rows) {
   var points = 0, credits = 0, i;
   for (i = 0; i < rows.length; i++) {
+    if (rows[i].excluded) continue;
     if (rows[i].credits > 0) { points += rows[i].credits * rows[i].grade; credits += rows[i].credits; }
   }
   return { gpa: credits ? points / credits : null, credits: credits, points: points };
+}
+/* Grade band for distribution counts: A >= 3.7, B >= 2.7, C >= 1.7, D >= 1.0, else F. */
+function gradeDistribution(rows) {
+  var d = { A: 0, B: 0, C: 0, D: 0, F: 0, total: 0 }, i, g;
+  for (i = 0; i < rows.length; i++) {
+    if (rows[i].excluded || !(rows[i].credits > 0)) continue;
+    d.total++;
+    g = rows[i].grade;
+    if (g >= 3.7) d.A++;
+    else if (g >= 2.7) d.B++;
+    else if (g >= 1.7) d.C++;
+    else if (g >= 1.0) d.D++;
+    else d.F++;
+  }
+  return d;
+}
+/* Final GPA if the remaining credits are all taken at one grade point. */
+function projectedGPA(now, credits, gradePoint) {
+  if (!now || now.gpa == null || credits <= 0) return null;
+  return (now.points + credits * gradePoint) / (now.credits + credits);
+}
+/* Credits needed at gradePoint to reach target. credits 0 = already there;
+   reachable false = even straight gradePoint cannot get there. */
+function creditsNeededAtGrade(now, target, gradePoint) {
+  if (!now || now.gpa == null) return { error: "no courses yet" };
+  if (target <= now.gpa) return { credits: 0, reachable: true };
+  if (gradePoint <= target) return { credits: null, reachable: false };
+  return { credits: (target * now.credits - now.points) / (gradePoint - target), reachable: true };
+}
+/* Accept a grade as a number ("3.7") or a letter ("A-", "B+"). Returns null if unknown. */
+function parseGradeValue(s) {
+  var t = String(s == null ? "" : s).replace(/^\s+|\s+$/g, "").toUpperCase();
+  var map = { "A+": 4.3, "A": 4, "A-": 3.7, "B+": 3.3, "B": 3, "B-": 2.7,
+    "C+": 2.3, "C": 2, "C-": 1.7, "D+": 1.3, "D": 1, "D-": 0.7, "F": 0 };
+  if (t in map) return map[t];
+  var n = parseFloat(t);
+  if (!isNaN(n) && n >= 0 && n <= 4.3) return n;
+  return null;
+}
+/* Split one CSV line, honouring double-quoted fields. */
+function parseCSVLine(line) {
+  var out = [], cur = "", inQ = false, i, ch;
+  for (i = 0; i < line.length; i++) {
+    ch = line.charAt(i);
+    if (inQ) {
+      if (ch === '"') {
+        if (line.charAt(i + 1) === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === ",") { out.push(cur); cur = ""; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+/* Parse exported CSV (Semester,Course,Credits,GradePoints[,Counted]).
+   Returns {rows, added, errors, clamped}. Header row, blank lines and bad rows are skipped.
+   scale ("4.0" / "4.3", default "4.3") is the ceiling: a grade above it is
+   lowered to the highest grade the scale offers, and the row is listed in
+   clamped as {line, name, from, to} so the import can tell the user
+   exactly which rows were lowered instead of silently changing them. */
+function parseCSV(text, scale) {
+  var lines = String(text || "").split(/\r\n|\r|\n/), rows = [], errors = 0, clamped = [], i, f;
+  var maxPoint = maxPointForScale(scale || "4.3");
+  for (i = 0; i < lines.length; i++) {
+    if (!lines[i].replace(/^\s+|\s+$/g, "")) continue;
+    f = parseCSVLine(lines[i]);
+    if (f.length >= 1 && f[0].replace(/^\s+|\s+$/g, "").toLowerCase() === "semester") continue;
+    if (f.length < 4) { errors++; continue; }
+    var credits = parseFloat(f[2]), grade = parseGradeValue(f[3]);
+    if (isNaN(credits) || credits < 0 || grade == null) { errors++; continue; }
+    if (grade > maxPoint) {
+      var to = clampGradeForScale(grade, scale || "4.3");
+      clamped.push({ line: i + 1, name: f[1].replace(/^\s+|\s+$/g, ""), from: grade, to: to });
+      grade = to;
+    }
+    var counted = true;
+    if (f.length >= 5) {
+      var c = f[4].replace(/^\s+|\s+$/g, "").toLowerCase();
+      if (c === "no" || c === "0" || c === "false" || c === "n") counted = false;
+    }
+    rows.push({ semester: f[0].replace(/^\s+|\s+$/g, "") || "Sem 1",
+      name: f[1].replace(/^\s+|\s+$/g, ""), credits: credits, grade: grade,
+      excluded: !counted });
+  }
+  return { rows: rows, added: rows.length, errors: errors, clamped: clamped };
 }
 /* Group rows by semester; returns [{semester, gpa, credits, points}] in first-seen order. */
 function semesterGPAs(rows) {
@@ -145,10 +308,10 @@ function csvEscape(v) {
   return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 function toCSV(rows) {
-  var out = ["Semester,Course,Credits,GradePoints"], i;
+  var out = ["Semester,Course,Credits,GradePoints,Counted"], i;
   for (i = 0; i < rows.length; i++) {
     out.push([csvEscape(rows[i].semester), csvEscape(rows[i].name),
-      rows[i].credits, rows[i].grade].join(","));
+      rows[i].credits, rows[i].grade, rows[i].excluded ? "No" : "Yes"].join(","));
   }
   return out.join("\n");
 }
@@ -168,7 +331,8 @@ function saveState(rows) {
   try {
     window.localStorage.setItem(STORE_KEY, JSON.stringify({
       rows: rows, target: el("targetGpa").value,
-      remain: el("remainCredits").value, trialCredits: el("trialCredits").value
+      remain: el("remainCredits").value, trialCredits: el("trialCredits").value,
+      scale: el("scaleSel").value
     }));
   } catch (e) {}
 }
@@ -200,17 +364,19 @@ function readRows() {
       semester: tds[0].getElementsByTagName("input")[0].value,
       name: tds[1].getElementsByTagName("input")[0].value,
       credits: num(tds[2].getElementsByTagName("input")[0].value, 0),
-      grade: num(tds[3].getElementsByTagName("select")[0].value, 0)
+      grade: num(tds[3].getElementsByTagName("select")[0].value, 0),
+      excluded: !tds[4].getElementsByTagName("input")[0].checked
     });
   }
   return rows;
 }
-function addRow(semester, name, credits, grade) {
+function addRow(semester, name, credits, grade, excluded) {
   var tr = document.createElement("tr");
-  tr.innerHTML = '<td><input type="text" class="semester" value="' + (semester || "Sem 1") + '"></td>' +
-    '<td><input type="text" value="' + (name || "") + '" placeholder="e.g. MKTG 101"></td>' +
+  tr.innerHTML = '<td><input type="text" class="semester" value="' + esc(semester || "Sem 1") + '"></td>' +
+    '<td><input type="text" value="' + esc(name || "") + '" placeholder="e.g. MKTG 101"></td>' +
     '<td><input type="text" class="credits" value="' + (credits == null ? 3 : credits) + '"></td>' +
-    '<td><select>' + gradeOptions(grade == null ? 3 : grade) + "</select></td>" +
+    '<td><select>' + gradeOptions(snapGradeDown(grade == null ? 3 : grade)) + "</select></td>" +
+    '<td><input type="checkbox" class="counted"' + (excluded ? "" : " checked") + '></td>' +
     '<td><button class="small ghost">✕</button></td>';
   tr.getElementsByTagName("button")[0].addEventListener("click", function () {
     tr.parentNode.removeChild(tr); render();
@@ -219,37 +385,65 @@ function addRow(semester, name, credits, grade) {
   inputs[0].addEventListener("input", render, false);
   inputs[1].addEventListener("input", render, false);
   inputs[2].addEventListener("input", render, false);
+  inputs[3].addEventListener("change", render, false);
   tr.getElementsByTagName("select")[0].addEventListener("change", render, false);
   el("courseBody").appendChild(tr);
+}
+/* Rebuild every grade <select> (course rows + trial) after a scale change,
+   keeping each row's current grade point where the new scale still has it. */
+function rebuildGradeSelects() {
+  var body = el("courseBody"), trs = body.getElementsByTagName("tr"), i, sel, cur, vals = [], j;
+  for (j = 0; j < GRADES.length; j++) vals.push(GRADES[j].value);
+  for (i = 0; i < trs.length; i++) {
+    sel = trs[i].getElementsByTagName("select")[0];
+    cur = snapGradeDown(num(sel.value, 3));
+    sel.innerHTML = gradeOptions(cur);
+  }
+  var trial = el("trialGrade"), tc = snapGradeDown(num(trial.value, 3));
+  trial.innerHTML = gradeOptions(tc);
 }
 function render() {
   var rows = readRows(), now = computeGPA(rows);
   var target = num(el("targetGpa").value, NaN), remain = num(el("remainCredits").value, 0);
   var tCredits = num(el("trialCredits").value, 0), tGrade = num(el("trialGrade").value, 0);
   var box, trial;
+  el("scaleLabel").textContent = fmt(MAX_POINT);
   if (now.gpa == null) {
     el("gpaNow").textContent = "—";
     el("creditsNow").textContent = "";
+    el("gpaFill").style.width = "0%";
     el("gpaNote").textContent = "加返啲科目先計到。Add some courses first.";
   } else {
     el("gpaNow").textContent = fmt(now.gpa);
     el("creditsNow").textContent = "· " + now.credits + " credits";
-    el("gpaNote").textContent = "Grade points " + fmt(now.points) + " / " + now.credits + " credits · 4.0 scale";
+    el("gpaFill").style.width = String(Math.round(now.gpa / MAX_POINT * 100)) + "%";
+    el("gpaNote").textContent = "Grade points " + fmt(now.points) + " / " + now.credits + " credits · " +
+      fmt(MAX_POINT) + " scale" + (now.gpa >= 3.7 ? " · 3.7+ (A band)" : "") +
+      (invalidRows(rows) ? " · 注意:有 " + invalidRows(rows) + " 行學分唔啱 (0 或超過 30),嗰啲行無計入 GPA。" : "");
   }
   var sems = semesterGPAs(rows), sh = "", si;
   for (si = 0; si < sems.length; si++) {
-    sh += "<p><strong>" + sems[si].semester + ":</strong> " +
+    sh += "<p><strong>" + esc(sems[si].semester) + ":</strong> " +
       (sems[si].gpa == null ? "—" : fmt(sems[si].gpa)) + " · " + sems[si].credits + " credits</p>";
   }
   el("semBox").innerHTML = sh || "<p>學期 GPA 會喺呢度分組顯示。Semester GPAs appear here, grouped.</p>";
+  var dist = gradeDistribution(rows);
+  el("distBox").innerHTML = dist.total
+    ? "<p><strong>成績分佈 Grade distribution</strong> (計入 GPA 的 " + dist.total + " 科): " +
+      "A: <strong>" + dist.A + "</strong> · B: <strong>" + dist.B + "</strong> · C: <strong>" +
+      dist.C + "</strong> · D: <strong>" + dist.D + "</strong> · F: <strong>" + dist.F + "</strong></p>"
+    : "<p>成績分佈會喺呢度顯示。Grade distribution appears here.</p>";
   saveState(rows);
   box = el("solverBox");
   if (now.gpa == null || isNaN(target)) {
     box.className = "result";
     box.innerHTML = "<p>輸入目標同餘下學分,呢度會話你知平均要攞幾多分。</p>";
+  } else if (target < 0) {
+    box.className = "result bad";
+    box.innerHTML = "<p><strong>目標唔可以係負數。</strong> Target GPA cannot be negative — pick 0 to " + fmt(MAX_POINT) + ".</p>";
   } else if (target > MAX_POINT) {
     box.className = "result bad";
-    box.innerHTML = "<p><strong>目標超出 4.0 上限。</strong> Target above the 4.0 maximum — pick 4.0 or lower.</p>";
+    box.innerHTML = "<p><strong>目標超出 " + fmt(MAX_POINT) + " 上限。</strong> Target above the " + fmt(MAX_POINT) + " maximum — pick " + fmt(MAX_POINT) + " or lower.</p>";
   } else {
     var r = requiredAverage(now, target, remain);
     if (r.error) {
@@ -268,7 +462,7 @@ function render() {
     } else {
       box.className = "result bad";
       box.innerHTML = "<p><strong>做唔到。</strong> You would need an average of " + fmt(r.need) +
-        ", above the 4.0 maximum, with only " + remain + " credits left.</p>" +
+        ", above the " + fmt(MAX_POINT) + " maximum, with only " + remain + " credits left.</p>" +
         "<p>就算餘下全部攞 A,最高只去到 " + fmt((now.points + MAX_POINT * remain) / (now.credits + remain)) +
         "。加多啲學分,或者將目標調低啲。</p>";
     }
@@ -283,6 +477,27 @@ function render() {
     trial.innerHTML = "<p>如果呢科 (" + tCredits + " 學分) 攞 " + nearestGradeLabel(tGrade) +
       ",GPA 會由 " + fmt(now.gpa) + " 變成 <strong>" + fmt(ng) + "</strong>。</p>";
   }
+  var scen = el("scenarioBox");
+  if (now.gpa == null || isNaN(target) || remain <= 0) {
+    scen.className = "result";
+    scen.innerHTML = "<p>輸入目標同餘下學分,呢度會推算全 A / 全 B / 全 C 嘅結果,同埋要幾多學分全 A 先達標。</p>";
+  } else {
+    var topGrade = GRADES[0].value;
+    var allA = projectedGPA(now, remain, topGrade);
+    var allB = projectedGPA(now, remain, 3.0);
+    var allC = projectedGPA(now, remain, 2.0);
+    var needA = creditsNeededAtGrade(now, target, topGrade);
+    var needTxt;
+    if (needA.error) needTxt = "—";
+    else if (needA.credits === 0) needTxt = "已經達標,唔使再攞 A。Already at target.";
+    else if (!needA.reachable) needTxt = "就算全部攞 " + nearestGradeLabel(topGrade) + " 都去唔到目標。Even straight " + nearestGradeLabel(topGrade) + " cannot reach it.";
+    else needTxt = "要 <strong>" + Math.ceil(needA.credits) + " 學分</strong>攞 " + nearestGradeLabel(topGrade) +
+      " (約 " + fmt(needA.credits) + " 學分) 先達標。";
+    scen.className = "result";
+    scen.innerHTML = "<p>餘下 " + remain + " 學分:全 " + nearestGradeLabel(topGrade) + " → <strong>" + fmt(allA) +
+      "</strong> · 全 B → <strong>" + fmt(allB) + "</strong> · 全 C → <strong>" + fmt(allC) + "</strong>。</p>" +
+      "<p>要達 GPA " + fmt(target) + ": " + needTxt + "</p>";
+  }
 }
 el("addCourse").addEventListener("click", function () { addRow("Sem 1", "", 3, 3); render(); }, false);
 el("loadSample").addEventListener("click", function () {
@@ -294,10 +509,61 @@ el("loadSample").addEventListener("click", function () {
 el("exportCsv").addEventListener("click", function () {
   downloadFile("gpa-courses.csv", toCSV(readRows()), "text/csv;charset=utf-8");
 }, false);
+el("importCsv").addEventListener("click", function () { el("csvFile").click(); }, false);
+el("csvFile").addEventListener("change", function () {
+  var f = el("csvFile").files && el("csvFile").files[0];
+  if (!f) return;
+  var reader = new FileReader();
+  reader.onload = function () {
+    var parsed = parseCSV(reader.result, el("scaleSel").value), i;
+    for (i = 0; i < parsed.rows.length; i++) {
+      addRow(parsed.rows[i].semester, parsed.rows[i].name, parsed.rows[i].credits,
+        parsed.rows[i].grade, parsed.rows[i].excluded);
+    }
+    render();
+    var msg = parsed.added
+      ? "匯入咗 " + parsed.added + " 科" + (parsed.errors ? ",跳過 " + parsed.errors + " 行格式唔啱。" : "。") +
+        "\nImported " + parsed.added + " course(s)" + (parsed.errors ? ", skipped " + parsed.errors + " bad row(s)." : ".")
+      : "冇一行啱格式,乜都冇匯入。請檢查 CSV 係咪 Semester,Course,Credits,GradePoints 格式。\nNo valid rows found — nothing imported.";
+    if (parsed.clamped && parsed.clamped.length) {
+      var lines = [], ci;
+      for (ci = 0; ci < parsed.clamped.length; ci++) {
+        lines.push("第 " + parsed.clamped[ci].line + " 行 " + (parsed.clamped[ci].name || "(無名)") +
+          ": " + parsed.clamped[ci].from + " → " + parsed.clamped[ci].to);
+      }
+      msg += "\n\n注意:以下 " + parsed.clamped.length + " 行超出 " + el("scaleSel").value +
+        " 制上限,已調低:\n" + lines.join("\n") +
+        "\nClamped to the " + el("scaleSel").value + " scale maximum.";
+    }
+    alert(msg);
+    el("csvFile").value = "";
+  };
+  reader.readAsText(f);
+}, false);
+el("scaleSel").addEventListener("change", function () {
+  var before = readRows();
+  applyScale(el("scaleSel").value);
+  rebuildGradeSelects();
+  render();
+  /* Same silent-snap problem as CSV import, but for switching scales:
+     say which rows were lowered instead of just changing them. */
+  var after = readRows(), changed = [], i;
+  for (i = 0; i < before.length; i++) {
+    if (after[i] && after[i].grade !== before[i].grade) {
+      changed.push((before[i].name || "未命名科目") + " (" + before[i].grade + " → " + after[i].grade + ")");
+    }
+  }
+  var note = el("scaleNote");
+  if (note) {
+    note.textContent = changed.length
+      ? "已將以下 " + changed.length + " 科調到 " + el("scaleSel").value + " 制上限: " + changed.join("、") + "。Grades above the new scale maximum were lowered."
+      : "";
+  }
+}, false);
 el("clearSaved").addEventListener("click", function () {
   try { window.localStorage.removeItem(STORE_KEY); } catch (e) {}
   el("courseBody").innerHTML = "";
-  addRow("Sem 1", "MKTG 101", 3, 4); addRow("Sem 1", "ECON 100", 3, 3.3); addRow("Sem 1", "ACCT 101", 3, 3);
+  addRow("Sem 1", "", 3, 3);
   render();
 }, false);
 el("targetGpa").addEventListener("input", render, false);
@@ -306,12 +572,13 @@ el("trialCredits").addEventListener("input", render, false);
 el("trialGrade").addEventListener("change", render, false);
 (function () {
   var saved = loadState(), i;
+  if (saved && saved.scale) { el("scaleSel").value = saved.scale; applyScale(saved.scale); rebuildGradeSelects(); }
   if (saved && saved.rows && saved.rows.length) {
     if (saved.target != null) el("targetGpa").value = saved.target;
     if (saved.remain != null) el("remainCredits").value = saved.remain;
     if (saved.trialCredits != null) el("trialCredits").value = saved.trialCredits;
     for (i = 0; i < saved.rows.length; i++) {
-      addRow(saved.rows[i].semester, saved.rows[i].name, saved.rows[i].credits, saved.rows[i].grade);
+      addRow(saved.rows[i].semester, saved.rows[i].name, saved.rows[i].credits, saved.rows[i].grade, saved.rows[i].excluded);
     }
   } else {
     addRow("Sem 1", "MKTG 101", 3, 4); addRow("Sem 1", "ECON 100", 3, 3.3); addRow("Sem 1", "ACCT 101", 3, 3);
